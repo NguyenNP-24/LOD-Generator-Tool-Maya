@@ -1,7 +1,7 @@
 # LOD-Generator-Tool-Maya
 One-click Maya tool for generating Levels of Detail (LODs) for 3D models (support Skinned mesh)
 
-INSTALL: Download and extract Zip file, then Drag install.py into Maya viewport (After installation is complete, you can delete the download folder)
+INSTALL: Download and extract Zip file, then Drag install.py into Maya viewport (After installation is complete, we can delete the download folder)
 
 This tool allows users to: 
 
