@@ -1,5 +1,5 @@
 import maya.cmds as cmds # type: ignore
-import maya.mel as mel # type: ignore   # For _cleanup_nonmanifold. cmds doesn't have polyCleanup 
+import maya.mel as mel # type: ignore    # For _cleanup_nonmanifold. cmds doesn't have polyCleanup 
 
 def generate_lods(lod_percents):
     """Generate LODs for the selected meshes"""
@@ -9,45 +9,62 @@ def generate_lods(lod_percents):
         return
 
     for mesh in selection:
-        # print(f"\n--- Generating LODs for: {mesh} ---")
+        generate_lods_single(mesh, lod_percents)
 
-        # create group containing LODs
-        group_name = f"{mesh}_LODs"
-        if not cmds.objExists(group_name):
-            group_name = cmds.group(empty=True, name=group_name)
-            parent = cmds.listRelatives(mesh, parent=True, fullPath=True)
-            if parent:
-                try:
-                    cmds.parent(group_name, parent[0])
-                except RuntimeError as e:
-                    cmds.warning(f"Cannot parent {group_name} to {parent[0]}: {e}")
 
-        # find original skinCluster if any
-        skin_cluster = _find_skincluster(mesh)
+def generate_lods_single(mesh, lod_percents):
+    """Generate LODs for a single mesh (called by UI with progress tracking)"""
+    # Validate mesh has shape
+    shapes = cmds.listRelatives(mesh, shapes=True, noIntermediate=True, fullPath=True)
+    if not shapes or cmds.nodeType(shapes[0]) != "mesh":
+        cmds.warning(f"{mesh} is not a valid mesh. Skipping.")
+        return
+    
+    # Get short name for cleaner LOD names
+    short_name = mesh.split("|")[-1]
+    
+    # Check if mesh has faces
+    face_count = cmds.polyEvaluate(mesh, face=True)
+    if face_count == 0:
+        cmds.warning(f"{short_name} has no faces. Skipping.")
+        return
 
-        # create LODs
-        for i, lod_info in enumerate(lod_percents, 1):
-            percent = lod_info["percent"]
-            lod_name = lod_info["name"]
+    # Create group containing LODs
+    group_name = f"{short_name}_LODs"
+    if not cmds.objExists(group_name):
+        group_name = cmds.group(empty=True, name=group_name)
+        parent = cmds.listRelatives(mesh, parent=True, fullPath=True)
+        if parent:
+            try:
+                cmds.parent(group_name, parent[0])
+            except RuntimeError as e:
+                cmds.warning(f"Cannot parent {group_name} to {parent[0]}: {e}")
 
-            lod_mesh = cmds.duplicate(mesh, name=f"{mesh}_{lod_name}")[0]
+    # Find original skinCluster if any
+    skin_cluster = _find_skincluster(mesh)
 
-            _cleanup_nonmanifold(lod_mesh)
-            _apply_poly_reduce(lod_mesh, percent)
+    # Create LODs
+    for i, lod_info in enumerate(lod_percents, 1):
+        percent = lod_info["percent"]
+        lod_name = lod_info["name"]
 
-            # delete history (to remove polyReduce node, clean mesh)
-            cmds.delete(lod_mesh, ch=True)
-            
-            # copy skin weights if present
-            if skin_cluster:
-                _copy_skin_weights(skin_cluster, mesh, lod_mesh)
+        lod_mesh = cmds.duplicate(mesh, name=f"{short_name}_{lod_name}")[0]
 
-            # parent into group
-            cmds.parent(lod_mesh, group_name)
+        _cleanup_nonmanifold(lod_mesh)
+        _apply_poly_reduce(lod_mesh, percent)
 
-            # add to display layer
-            _assign_display_layer(lod_mesh, lod_name)
-            # print(f"✅ Created {lod_name} ({percent}%)")
+        # Delete history (to remove polyReduce node, clean mesh)
+        cmds.delete(lod_mesh, ch=True)
+        
+        # Copy skin weights if present
+        if skin_cluster:
+            _copy_skin_weights(skin_cluster, mesh, lod_mesh)
+
+        # Parent into group
+        cmds.parent(lod_mesh, group_name)
+
+        # Add to display layer
+        _assign_display_layer(lod_mesh, lod_name)
 
 
 # =============================
@@ -68,7 +85,6 @@ def _cleanup_nonmanifold(mesh):
         cmds.select(mesh)
         mel.eval('polyCleanupArgList 3 { "0","2","1","0","0","1","0","1","0","0","0","0","0","1" };')
         cmds.select(clear=True)
-        # print(f"Cleaned non-manifold: {mesh}")
     except Exception as e:
         cmds.warning(f"Cleanup failed on {mesh}: {e}")
 
@@ -78,7 +94,8 @@ def _apply_poly_reduce(mesh, percent):
     face_count = cmds.polyEvaluate(mesh, face=True)
     if face_count == 0:
         cmds.warning(f"{mesh} has no faces to reduce.")
-        return    
+        return
+    
     try:
         cmds.polyReduce(
             mesh,
@@ -96,7 +113,6 @@ def _apply_poly_reduce(mesh, percent):
             cachingReduce=True,
             preserveTopology=True,
         )
-        # print(f"Reduced {mesh} → {percent}%")
     except Exception as e:
         cmds.warning(f"PolyReduce failed on {mesh}: {e}")
 
@@ -115,7 +131,6 @@ def _copy_skin_weights(source_skin, source_mesh, target_mesh):
             surfaceAssociation="closestPoint",
             influenceAssociation=["closestJoint", "closestBone", "oneToOne"],
         )
-        # print(f"Copied skin weights → {target_mesh}")
     except Exception as e:
         cmds.warning(f"Copy skin weights failed for {target_mesh}: {e}")
 
