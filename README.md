@@ -17,4 +17,4 @@ One-click Maya tool for generating Levels of Detail (LODs) for 3D models (suppor
     
 <img width="1082" height="680" alt="image" src="https://github.com/user-attachments/assets/76dc626a-52fe-4702-bb98-679ddfa006d3" />
 
-Detail process: https://www.youtube.com/watch?v=n3H5vEccglE&t=11s
+
