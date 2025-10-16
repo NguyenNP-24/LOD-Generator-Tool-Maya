@@ -1,54 +1,90 @@
 import os
 import shutil
-import maya.cmds as cmds # type: ignore
+import maya.cmds as cmds
+
+def onMayaDroppedPythonFile(*args):
+    """
+    Maya entry point when this install script is dragged into the viewport.
+    """
+    try:
+        install_tool()
+    except Exception as e:
+        cmds.warning(f"[LOD Generator Installer] Error: {e}")
 
 def install_tool():
     """
-    Automatic installation for LOD_Generator:
-    - Copy the LOD_Generator folder into Maya's scripts folder
-    - Create a Shelf button if desired
+    Main installation logic for LOD Generator.
+    - Removes any old installation of LOD_Generator.
+    - Copies the new files into the Maya scripts folder.
+    - Adds the shelf button automatically.
     """
-    # Directory containing this install file
-    src = os.path.dirname(__file__)
 
-    # Maya scripts directory
-    dst = os.path.join(cmds.internalVar(userScriptDir=True), "LOD_Generator")
+    # Detect Maya scripts directory
+    scripts_dir = os.path.join(cmds.internalVar(userAppDir=True), "scripts")
+    install_dir = os.path.dirname(os.path.abspath(__file__))
+    target_dir = os.path.join(scripts_dir, "LOD_Generator")
 
-    # If it already exists, remove it first
-    if os.path.exists(dst):
-        shutil.rmtree(dst)
+    print(f"[LOD Generator Installer] Maya scripts folder: {scripts_dir}")
+    print(f"[LOD Generator Installer] Install source: {install_dir}")
 
-    # Copy the entire LOD_Generator folder into scripts
-    shutil.copytree(src, dst)
+    # --- Remove all old LOD_Generator folders ---
+    for root, dirs, _ in os.walk(scripts_dir):
+        for d in dirs:
+            if d == "LOD_Generator":
+                old_path = os.path.join(root, d)
+                try:
+                    shutil.rmtree(old_path)
+                    print(f"[LOD Generator Installer] Removed old folder: {old_path}")
+                except Exception as e:
+                    cmds.warning(f"Failed to remove {old_path}: {e}")
 
-    # Create a Shelf button (optional, comment out if not desired)
+    # --- Copy new files ---
     try:
-        shelf_name = "CustomTools"  # name of the shelf to create the button on
-        if not cmds.shelfLayout(shelf_name, exists=True):
-            cmds.shelfLayout(shelf_name, parent="ShelfLayout")
-
-        # If the button already exists, delete it
-        existing_btns = cmds.shelfLayout(shelf_name, query=True, childArray=True) or []
-        for btn in existing_btns:
-            if cmds.shelfButton(btn, query=True, label=True) == "LOD Generator":
-                cmds.deleteUI(btn)
-
-        # Create the new button
-        cmds.shelfButton(
-            parent=shelf_name,
-            command='import LOD_Generator.main; LOD_Generator.main.start()',
-            image='commandButton.png',  # can change the icon
-            label='LOD Generator',
-            annotation='Open LOD Generator Tool',
-            style='iconAndTextVertical'
-        )
+        shutil.copytree(install_dir, target_dir)
+        print(f"[LOD Generator Installer] Installed to: {target_dir}")
     except Exception as e:
-        cmds.warning(f"Could not create shelf button: {e}")
+        cmds.warning(f"Failed to copy files: {e}")
+        return
 
-    cmds.confirmDialog(title="Install Complete",
-                       message="LOD Generator has been successfully installed!",
-                       button=["OK"])
+    # --- Add Shelf Button ---
+    add_shelf_button(target_dir)
 
+    cmds.inViewMessage(
+        amg="<hl>LOD Generator installed successfully!</hl>",
+        pos="midCenter",
+        fade=True
+    )
 
-# When dragged into Maya, run automatically
-install_tool()
+def add_shelf_button(tool_dir):
+    """
+    Adds a new shelf button for the LOD Generator tool.
+    If the shelf already exists, the old button will be replaced.
+    """
+
+    shelf_name = "Custom"
+    icon_path = os.path.join(tool_dir, "icon.png")
+
+    # Try to find or create shelf tab
+    if not cmds.shelfLayout(shelf_name, exists=True):
+        shelf_name = cmds.shelfLayout(shelf_name, p="ShelfLayout")
+
+    # Remove any existing button with same label
+    buttons = cmds.shelfLayout(shelf_name, q=True, ca=True) or []
+    for btn in buttons:
+        if cmds.shelfButton(btn, q=True, label=True) == "LOD Generator":
+            cmds.deleteUI(btn)
+
+    # Create new shelf button
+    cmds.shelfButton(
+        parent=shelf_name,
+        label="LOD Generator",
+        annotation="Launch LOD Generator Tool",
+        image1=icon_path if os.path.exists(icon_path) else "commandButton.png",
+        command='import LOD_Generator.main as main; main.start()'
+    )
+
+    print(f"[LOD Generator Installer] Shelf button added to: {shelf_name}")
+
+# Execute immediately if run directly
+if __name__ == "__main__":
+    install_tool()
